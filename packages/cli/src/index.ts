@@ -97,6 +97,39 @@ program
     }
   });
 
+// Config command - change AI provider/key
+program
+  .command('config')
+  .description('Change AI provider or API key')
+  .action(async () => {
+    try {
+      const currentProvider = getAiProvider();
+      if (currentProvider) {
+        console.log(
+          chalk.blue(`\nCurrent AI provider: ${chalk.cyan(currentProvider)}\n`),
+        );
+      }
+
+      // Select new provider
+      const provider = await selectAiProvider();
+      console.log(chalk.green(`\n✓ Selected: ${provider}\n`));
+
+      // Enter new API key
+      const apiKey = await inputApiKey(provider);
+
+      // Save configuration
+      setApiKey(provider, apiKey);
+
+      console.log(chalk.green.bold('\n✅ Configuration updated!\n'));
+      console.log(chalk.gray(`Saved to: ${getConfigPath()}\n`));
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(chalk.red(`\nError: ${error.message}`));
+      }
+      process.exit(1);
+    }
+  });
+
 // Push command
 program
   .command('push')

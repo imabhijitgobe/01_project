@@ -73,14 +73,25 @@ export async function hasRemote(): Promise<boolean> {
 export async function createGitHubRepo(): Promise<void> {
   const folderName = path.basename(process.cwd());
   console.log(chalk.yellow(`Creating GitHub repository: ${folderName}...`));
-  await execa('gh', [
+
+  // Create the repo
+  const { stdout } = await execa('gh', [
     'repo',
     'create',
     folderName,
     '--public',
     '--source=.',
     '--remote=origin',
+    '--push',
   ]);
+
+  // Get the repo URL and ensure it's HTTPS
+  const repoUrl = stdout.match(/https:\/\/github\.com\/[^\s]+/)?.[0];
+  if (repoUrl) {
+    // Ensure remote uses HTTPS (not SSH) for easier auth
+    await execa('git', ['remote', 'set-url', 'origin', `${repoUrl}.git`]);
+  }
+
   console.log(chalk.green(`GitHub repository "${folderName}" created.`));
 }
 
