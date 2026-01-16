@@ -15,6 +15,29 @@ export async function isGhInstalled(): Promise<boolean> {
 }
 
 /**
+ * Install GitHub CLI using winget (Windows)
+ */
+export async function installGhCli(): Promise<void> {
+  console.log(chalk.yellow('Installing GitHub CLI...'));
+  await execa(
+    'winget',
+    [
+      'install',
+      'GitHub.cli',
+      '--accept-source-agreements',
+      '--accept-package-agreements',
+    ],
+    {
+      stdio: 'inherit',
+    },
+  );
+  console.log(chalk.green('✓ GitHub CLI installed successfully!'));
+  console.log(
+    chalk.yellow('Please restart your terminal and run the command again.\n'),
+  );
+}
+
+/**
  * Check if user is authenticated with GitHub CLI
  */
 export async function isGhAuthenticated(): Promise<boolean> {
@@ -31,7 +54,9 @@ export async function isGhAuthenticated(): Promise<boolean> {
  */
 export async function loginGh(): Promise<void> {
   console.log(chalk.yellow('Starting GitHub authentication...'));
-  await execa('gh', ['auth', 'login'], { stdio: 'inherit' });
+  await execa('gh', ['auth', 'login', '-h', 'github.com', '-w'], {
+    stdio: 'inherit',
+  });
 }
 
 /**

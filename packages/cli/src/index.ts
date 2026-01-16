@@ -16,6 +16,7 @@ import {
   hasChanges,
   hasRemote,
   initGitRepo,
+  installGhCli,
   isGhAuthenticated,
   isGhInstalled,
   isGitRepo,
@@ -156,21 +157,61 @@ program
       if (!(await isGhInstalled())) {
         console.log(chalk.red('\n❌ GitHub CLI (gh) is not installed.'));
         console.log(
-          chalk.cyan('Please install from: https://cli.github.com/\n'),
+          chalk.cyan('You can install it using: winget install GitHub.cli\n'),
         );
-        process.exit(1);
+
+        const { confirm } = await import('./lib/prompt.js');
+        const shouldInstall = await confirm(
+          'Would you like to install GitHub CLI now?',
+        );
+
+        if (shouldInstall) {
+          await installGhCli();
+          process.exit(0); // Need to restart terminal after install
+        } else {
+          console.log(
+            chalk.gray('\nPlease install GitHub CLI and try again.\n'),
+          );
+          process.exit(1);
+        }
       }
       console.log(chalk.green('✓ GitHub CLI installed.\n'));
 
       // Step 2: Check GitHub authentication
       console.log(chalk.blue('Checking GitHub authentication...'));
+      let needsApiReconfigure = false;
       if (!(await isGhAuthenticated())) {
         console.log(chalk.yellow('Not authenticated with GitHub.'));
         await loginGh();
+        needsApiReconfigure = true; // Force API reconfiguration after fresh GitHub auth
       }
       console.log(chalk.green('✓ Authenticated with GitHub.\n'));
 
-      // Step 3: Check git repository
+      // Step 3: Check AI provider configuration (only if not using -m flag)
+      if (!options.message) {
+        console.log(chalk.blue('Checking AI configuration...'));
+        if (!isSetupComplete() || needsApiReconfigure) {
+          if (needsApiReconfigure && isSetupComplete()) {
+            console.log(
+              chalk.yellow(
+                "Fresh GitHub login detected. Let's verify your AI configuration.",
+              ),
+            );
+          } else {
+            console.log(chalk.yellow('AI provider not configured.'));
+          }
+          console.log(chalk.cyan('Select your AI provider:\n'));
+
+          const provider = await selectAiProvider();
+          const apiKey = await inputApiKey(provider);
+          setApiKey(provider, apiKey);
+          console.log(chalk.green('\n✓ AI configuration saved.\n'));
+        } else {
+          console.log(chalk.green('✓ AI provider configured.\n'));
+        }
+      }
+
+      // Step 4: Check git repository
       console.log(chalk.blue('Checking git repository...'));
       if (!(await isGitRepo())) {
         console.log(chalk.yellow('Not a git repository. Initializing...'));
@@ -207,14 +248,17 @@ program
         commitMessage = options.message;
         console.log(chalk.green('Using provided commit message.\n'));
       } else {
-        const provider = getAiProvider();
-        const apiKey = getApiKey();
+        let provider = getAiProvider();
+        let apiKey = getApiKey();
 
         if (!provider || !apiKey) {
-          console.error(
-            chalk.red('Configuration missing. Please run: my-cli setup'),
-          );
-          process.exit(1);
+          console.log(chalk.yellow('\n⚠️  AI provider not configured.'));
+          console.log(chalk.cyan("Let's set it up now:\n"));
+
+          provider = await selectAiProvider();
+          apiKey = await inputApiKey(provider);
+          setApiKey(provider, apiKey);
+          console.log(chalk.green('\n✓ Configuration saved.\n'));
         }
 
         // Get diff and generate message
@@ -224,10 +268,41 @@ program
           process.exit(0);
         }
 
-        commitMessage = await generateCommitMessage(diff, provider, apiKey);
-        console.log(
-          chalk.cyan(`\n📝 Commit message:\n${chalk.white(commitMessage)}\n`),
-        );
+        try {
+          commitMessage = await generateCommitMessage(diff, provider, apiKey);
+          console.log(
+            chalk.cyan(`\n📝 Commit message:\n${chalk.white(commitMessage)}\n`),
+          );
+        } catch (aiError) {
+          console.log(
+            chalk.red(
+              `\n❌ AI Error: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`,
+            ),
+          );
+          console.log(
+            chalk.yellow('\nWould you like to reconfigure your AI provider?\n'),
+          );
+
+          const { confirm } = await import('./lib/prompt.js');
+          const shouldReconfigure = await confirm('Reconfigure AI provider?');
+
+          if (shouldReconfigure) {
+            provider = await selectAiProvider();
+            apiKey = await inputApiKey(provider);
+            setApiKey(provider, apiKey);
+            console.log(chalk.green('\n✓ Configuration saved. Retrying...\n'));
+
+            commitMessage = await generateCommitMessage(diff, provider, apiKey);
+            console.log(
+              chalk.cyan(
+                `\n📝 Commit message:\n${chalk.white(commitMessage)}\n`,
+              ),
+            );
+          } else {
+            console.log(chalk.gray('\nPlease run: git-ai config\n'));
+            process.exit(1);
+          }
+        }
       }
 
       // Step 6: Commit
@@ -239,6 +314,259 @@ program
       await push();
 
       console.log(chalk.green.bold('\n✅ Push complete!\n'));
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(chalk.red(`\nError: ${error.message}`));
+      }
+      process.exit(1);
+    }
+  });
+
+// Repos command - list and manage GitHub repositories
+program
+  .command('repos')
+  .description('List your GitHub repositories')
+  .option('-n, --limit <number>', 'Number of repos to show', '10')
+  .option('-d, --delete <name>', 'Delete a repository by name')
+  .action(async (options) => {
+    try {
+      const { execa } = await import('execa');
+
+      // Check GitHub CLI
+      if (!(await isGhInstalled())) {
+        console.log(chalk.red('❌ GitHub CLI (gh) is not installed.'));
+        process.exit(1);
+      }
+
+      // Check authentication
+      if (!(await isGhAuthenticated())) {
+        console.log(chalk.yellow('Not authenticated with GitHub.'));
+        await loginGh();
+      }
+
+      // If delete option provided
+      if (options.delete) {
+        let repoName = options.delete;
+
+        // Auto-prepend username if not included
+        if (!repoName.includes('/')) {
+          const { stdout: username } = await execa('gh', [
+            'api',
+            'user',
+            '--jq',
+            '.login',
+          ]);
+          repoName = `${username.trim()}/${repoName}`;
+        }
+
+        console.log(chalk.blue.bold('\n🗑️  Delete Repository\n'));
+        console.log(chalk.yellow(`Repository: ${chalk.cyan(repoName)}\n`));
+
+        const { confirm } = await import('./lib/prompt.js');
+        const confirmed = await confirm(
+          chalk.red(
+            `⚠️  Are you sure you want to DELETE ${repoName}? This cannot be undone!`,
+          ),
+        );
+
+        if (!confirmed) {
+          console.log(chalk.gray('\nDeletion cancelled.\n'));
+          process.exit(0);
+        }
+
+        console.log(chalk.yellow('\nDeleting repository...'));
+
+        try {
+          await execa('gh', ['repo', 'delete', repoName, '--yes']);
+        } catch (deleteError) {
+          if (
+            deleteError instanceof Error &&
+            deleteError.message.includes('delete_repo')
+          ) {
+            console.log(
+              chalk.yellow('\n⚠️  Requesting delete_repo permission...'),
+            );
+            await execa(
+              'gh',
+              ['auth', 'refresh', '-h', 'github.com', '-s', 'delete_repo'],
+              {
+                stdio: 'inherit',
+              },
+            );
+            console.log(chalk.yellow('\nRetrying deletion...'));
+            await execa('gh', ['repo', 'delete', repoName, '--yes']);
+          } else {
+            throw deleteError;
+          }
+        }
+
+        console.log(
+          chalk.green.bold('\n✅ Repository deleted successfully!\n'),
+        );
+        return;
+      }
+
+      // List repositories
+      const limit = parseInt(options.limit) || 10;
+      console.log(
+        chalk.blue.bold(`\n📂 Your GitHub Repositories (showing ${limit}):\n`),
+      );
+
+      const { stdout } = await execa('gh', [
+        'repo',
+        'list',
+        '--limit',
+        limit.toString(),
+        '--json',
+        'name,visibility,updatedAt,url',
+      ]);
+
+      const repos = JSON.parse(stdout);
+
+      if (repos.length === 0) {
+        console.log(chalk.yellow('No repositories found.\n'));
+        return;
+      }
+
+      repos.forEach(
+        (
+          repo: {
+            name: string;
+            visibility: string;
+            updatedAt: string;
+            url: string;
+          },
+          index: number,
+        ) => {
+          const visibility =
+            repo.visibility === 'PUBLIC'
+              ? chalk.green('public')
+              : chalk.yellow('private');
+          const date = new Date(repo.updatedAt).toLocaleDateString();
+          console.log(
+            `${chalk.gray(`${index + 1}.`)} ${chalk.cyan(repo.name)} ${chalk.gray(`[${visibility}]`)} ${chalk.gray(`- Updated: ${date}`)}`,
+          );
+        },
+      );
+
+      console.log(
+        chalk.gray(
+          `\nTo delete a repo: pnpm run cli repos --delete <owner/repo-name>\n`,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(chalk.red(`\nError: ${error.message}`));
+      }
+      process.exit(1);
+    }
+  });
+
+// Delete command - delete GitHub repository
+program
+  .command('delete')
+  .description('Delete the GitHub repository for this project')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue.bold('\n🗑️  Delete Repository\n'));
+
+      // Check GitHub CLI
+      if (!(await isGhInstalled())) {
+        console.log(chalk.red('❌ GitHub CLI (gh) is not installed.'));
+        process.exit(1);
+      }
+
+      // Check authentication
+      if (!(await isGhAuthenticated())) {
+        console.log(chalk.yellow('Not authenticated with GitHub.'));
+        await loginGh();
+      }
+
+      // Check if remote exists
+      if (!(await hasRemote())) {
+        console.log(
+          chalk.yellow('No GitHub remote found for this repository.\n'),
+        );
+        process.exit(1);
+      }
+
+      // Get repo name from remote
+      const { execa } = await import('execa');
+      const { stdout: remoteUrl } = await execa('git', [
+        'remote',
+        'get-url',
+        'origin',
+      ]);
+      const repoMatch = remoteUrl.match(/github\.com[:/](.+?)(?:\.git)?$/);
+
+      if (!repoMatch) {
+        console.log(
+          chalk.red('Could not determine repository name from remote URL.\n'),
+        );
+        process.exit(1);
+      }
+
+      const repoName = repoMatch[1].replace('.git', '');
+      console.log(chalk.yellow(`Repository: ${chalk.cyan(repoName)}\n`));
+
+      if (!options.yes) {
+        const { confirm } = await import('./lib/prompt.js');
+        const confirmed = await confirm(
+          chalk.red(
+            `⚠️  Are you sure you want to DELETE ${repoName}? This cannot be undone!`,
+          ),
+        );
+
+        if (!confirmed) {
+          console.log(chalk.gray('\nDeletion cancelled.\n'));
+          process.exit(0);
+        }
+      }
+
+      console.log(chalk.yellow('\nDeleting repository...'));
+
+      try {
+        await execa('gh', ['repo', 'delete', repoName, '--yes']);
+      } catch (deleteError) {
+        // Check if it's a permission error
+        if (
+          deleteError instanceof Error &&
+          deleteError.message.includes('delete_repo')
+        ) {
+          console.log(
+            chalk.yellow(
+              '\n⚠️  GitHub CLI needs additional permissions to delete repositories.',
+            ),
+          );
+          console.log(chalk.cyan('Requesting delete_repo scope...\n'));
+
+          // Request delete_repo scope
+          await execa(
+            'gh',
+            ['auth', 'refresh', '-h', 'github.com', '-s', 'delete_repo'],
+            {
+              stdio: 'inherit',
+            },
+          );
+
+          // Retry deletion
+          console.log(chalk.yellow('\nRetrying deletion...'));
+          await execa('gh', ['repo', 'delete', repoName, '--yes']);
+        } else {
+          throw deleteError;
+        }
+      }
+
+      // Remove the remote
+      await execa('git', ['remote', 'remove', 'origin']);
+
+      console.log(chalk.green.bold('\n✅ Repository deleted successfully!\n'));
+      console.log(
+        chalk.gray(
+          'The local git repository still exists. Remote "origin" has been removed.\n',
+        ),
+      );
     } catch (error) {
       if (error instanceof Error) {
         console.error(chalk.red(`\nError: ${error.message}`));

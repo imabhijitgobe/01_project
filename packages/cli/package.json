@@ -4,7 +4,7 @@
   "description": "My awesome CLI",
   "main": "dist/index.js",
   "bin": {
-    "my-cli": "./dist/index.js"
+    "git-ai": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
