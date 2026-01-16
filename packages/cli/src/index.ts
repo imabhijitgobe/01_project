@@ -60,13 +60,15 @@ program
 
       // Step 2: Check GitHub authentication
       console.log(chalk.blue('Step 2: Checking GitHub authentication...'));
-      if (!(await isGhAuthenticated())) {
+      if (await isGhAuthenticated()) {
+        console.log(chalk.green('✓ Already authenticated with GitHub.\n'));
+      } else {
         console.log(
           chalk.yellow('Not authenticated with GitHub. Starting login...\n'),
         );
         await loginGh();
+        console.log(chalk.green('✓ Authenticated with GitHub.\n'));
       }
-      console.log(chalk.green('✓ Authenticated with GitHub.\n'));
 
       // Step 3: Select AI provider
       console.log(
