@@ -1,0 +1,24 @@
+{
+  "name": "@cli-tools/cli",
+  "version": "0.1.0",
+  "description": "My awesome CLI",
+  "main": "dist/index.js",
+  "bin": {
+    "my-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc -w"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
+    "axios": "^1.13.2",
+    "chalk": "^4.1.2",
+    "commander": "^14.0.2",
+    "execa": "^9.6.1"
+  }
+}
