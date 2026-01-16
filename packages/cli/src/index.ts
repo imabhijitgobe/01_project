@@ -151,7 +151,26 @@ program
 
       console.log(chalk.blue.bold('\n🚀 Starting push...\n'));
 
-      // Step 1: Check git repository
+      // Step 1: Check GitHub CLI
+      console.log(chalk.blue('Checking GitHub CLI...'));
+      if (!(await isGhInstalled())) {
+        console.log(chalk.red('\n❌ GitHub CLI (gh) is not installed.'));
+        console.log(
+          chalk.cyan('Please install from: https://cli.github.com/\n'),
+        );
+        process.exit(1);
+      }
+      console.log(chalk.green('✓ GitHub CLI installed.\n'));
+
+      // Step 2: Check GitHub authentication
+      console.log(chalk.blue('Checking GitHub authentication...'));
+      if (!(await isGhAuthenticated())) {
+        console.log(chalk.yellow('Not authenticated with GitHub.'));
+        await loginGh();
+      }
+      console.log(chalk.green('✓ Authenticated with GitHub.\n'));
+
+      // Step 3: Check git repository
       console.log(chalk.blue('Checking git repository...'));
       if (!(await isGitRepo())) {
         console.log(chalk.yellow('Not a git repository. Initializing...'));
