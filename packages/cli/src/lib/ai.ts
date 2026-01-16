@@ -4,6 +4,27 @@ import type { AiProvider } from './config.js';
 
 const COMMIT_PROMPT = `You are an expert developer. Based on the following git diff, write a concise, professional commit message following conventional commit standards. Output only the message text, nothing else:`;
 
+// Max characters to send to AI (to avoid 413 errors)
+const MAX_DIFF_LENGTH = 8000;
+
+/**
+ * Truncate diff to avoid API size limits
+ */
+function truncateDiff(diff: string): string {
+  if (diff.length <= MAX_DIFF_LENGTH) {
+    return diff;
+  }
+  console.log(
+    chalk.yellow(
+      `Diff is large (${diff.length} chars). Truncating to ${MAX_DIFF_LENGTH} chars...`,
+    ),
+  );
+  return (
+    diff.substring(0, MAX_DIFF_LENGTH) +
+    '\n\n[... diff truncated due to size ...]'
+  );
+}
+
 /**
  * Generate a commit message using the configured AI provider
  */
@@ -14,15 +35,18 @@ export async function generateCommitMessage(
 ): Promise<string> {
   console.log(chalk.yellow('Generating commit message with AI...'));
 
+  // Truncate large diffs to avoid 413 errors
+  const truncatedDiff = truncateDiff(diff);
+
   switch (provider) {
     case 'gemini':
-      return generateWithGemini(diff, apiKey);
+      return generateWithGemini(truncatedDiff, apiKey);
     case 'openai':
-      return generateWithOpenAI(diff, apiKey);
+      return generateWithOpenAI(truncatedDiff, apiKey);
     case 'anthropic':
-      return generateWithAnthropic(diff, apiKey);
+      return generateWithAnthropic(truncatedDiff, apiKey);
     case 'github':
-      return generateWithGitHub(diff, apiKey);
+      return generateWithGitHub(truncatedDiff, apiKey);
     default:
       throw new Error(`Unknown AI provider: ${provider}`);
   }
