@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { generateCommitMessage } from './lib/ai.js';
 import {
+  clearConfig,
   getAiProvider,
   getApiKey,
   getConfigPath,
@@ -21,6 +22,7 @@ import {
   isGhInstalled,
   isGitRepo,
   loginGh,
+  logoutGh,
   push,
   stageAll,
 } from './lib/git.js';
@@ -46,15 +48,24 @@ program
       console.log(chalk.blue('Step 1: Checking GitHub CLI installation...'));
       if (!(await isGhInstalled())) {
         console.log(chalk.red('\n❌ GitHub CLI (gh) is not installed.'));
-        console.log(chalk.yellow('\nPlease install it from:'));
-        console.log(chalk.cyan('  https://cli.github.com/\n'));
-        console.log(chalk.yellow('Installation commands:'));
         console.log(
-          chalk.gray('  Windows (winget): winget install GitHub.cli'),
+          chalk.cyan('You can install it using: winget install GitHub.cli\n'),
         );
-        console.log(chalk.gray('  macOS (brew):     brew install gh'));
-        console.log(chalk.gray('  Linux (apt):      sudo apt install gh\n'));
-        process.exit(1);
+
+        const { confirm } = await import('./lib/prompt.js');
+        const shouldInstall = await confirm(
+          'Would you like to install GitHub CLI now?',
+        );
+
+        if (shouldInstall) {
+          await installGhCli();
+          process.exit(0); // Need to restart terminal after install
+        } else {
+          console.log(
+            chalk.gray('\nPlease install GitHub CLI and run setup again.\n'),
+          );
+          process.exit(1);
+        }
       }
       console.log(chalk.green('✓ GitHub CLI is installed.\n'));
 
@@ -569,6 +580,53 @@ program
           'The local git repository still exists. Remote "origin" has been removed.\n',
         ),
       );
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(chalk.red(`\nError: ${error.message}`));
+      }
+      process.exit(1);
+    }
+  });
+
+// Logout command - clear config and optionally logout from GitHub
+program
+  .command('logout')
+  .description('Clear stored API key and optionally logout from GitHub')
+  .option('-a, --all', 'Also logout from GitHub CLI')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue.bold('\n👋 Logout\n'));
+
+      // Clear local config (API key)
+      const configCleared = clearConfig();
+      if (configCleared) {
+        console.log(chalk.green('✓ API key and configuration cleared.'));
+      } else {
+        console.log(chalk.yellow('No configuration found to clear.'));
+      }
+
+      // Optionally logout from GitHub CLI
+      if (options.all) {
+        const { confirm } = await import('./lib/prompt.js');
+        const shouldLogoutGh = await confirm(
+          'Do you also want to logout from GitHub CLI?',
+        );
+
+        if (shouldLogoutGh) {
+          try {
+            await logoutGh();
+            console.log(chalk.green('✓ Logged out from GitHub CLI.'));
+          } catch {
+            console.log(
+              chalk.yellow(
+                'Could not logout from GitHub CLI (may not be logged in).',
+              ),
+            );
+          }
+        }
+      }
+
+      console.log(chalk.green.bold('\n✅ Logout complete!\n'));
     } catch (error) {
       if (error instanceof Error) {
         console.error(chalk.red(`\nError: ${error.message}`));

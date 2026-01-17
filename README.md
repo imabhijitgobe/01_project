@@ -219,6 +219,23 @@ git-ai delete --yes
 
 ---
 
+### `git-ai logout`
+
+Clear your stored API key and optionally logout from GitHub CLI.
+
+```bash
+# Clear API key only
+git-ai logout
+
+# Clear API key and logout from GitHub CLI
+git-ai logout -a
+git-ai logout --all
+```
+
+This command securely removes your stored API key from the local configuration file.
+
+---
+
 ## ⚙️ Configuration
 
 Configuration is stored locally at `~/.my-cli/config.json`

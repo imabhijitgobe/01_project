@@ -43,6 +43,8 @@ export async function selectAiProvider(): Promise<AiProvider> {
  * Prompt user to enter their API key
  */
 export async function inputApiKey(provider: AiProvider): Promise<string> {
+  const { testApiKey } = await import('./ai.js');
+
   const providerNames: Record<AiProvider, string> = {
     gemini: 'Gemini',
     openai: 'OpenAI',
@@ -63,18 +65,33 @@ export async function inputApiKey(provider: AiProvider): Promise<string> {
     ),
   );
 
-  const apiKey = await password({
-    message: `Enter your ${providerNames[provider]} API key:`,
-    mask: '*',
-    validate: (value) => {
-      if (!value || value.trim().length === 0) {
-        return 'API key cannot be empty';
-      }
-      return true;
-    },
-  });
+  // Loop until valid API key is provided
+  while (true) {
+    const apiKey = await password({
+      message: `Enter your ${providerNames[provider]} API key:`,
+      mask: '*',
+      validate: (value) => {
+        if (!value || value.trim().length === 0) {
+          return 'API key cannot be empty';
+        }
+        return true;
+      },
+    });
 
-  return apiKey.trim();
+    const trimmedKey = apiKey.trim();
+
+    // Validate the API key
+    console.log(chalk.yellow('\nValidating API key...'));
+    const result = await testApiKey(provider, trimmedKey);
+
+    if (result.valid) {
+      console.log(chalk.green('✓ API key is valid!\n'));
+      return trimmedKey;
+    } else {
+      console.log(chalk.red(`\n❌ ${result.error || 'Invalid API key'}`));
+      console.log(chalk.yellow('Please try again.\n'));
+    }
+  }
 }
 
 /**

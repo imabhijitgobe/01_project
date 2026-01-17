@@ -53,6 +53,99 @@ export async function generateCommitMessage(
 }
 
 /**
+ * Test if an API key is valid by making a minimal API call
+ */
+export async function testApiKey(
+  provider: AiProvider,
+  apiKey: string,
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    switch (provider) {
+      case 'gemini': {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        await axios.post(
+          url,
+          {
+            contents: [{ parts: [{ text: 'Say "OK"' }] }],
+          },
+          { timeout: 15000 },
+        );
+        return { valid: true };
+      }
+      case 'openai': {
+        await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: 'Say "OK"' }],
+            max_tokens: 5,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+          },
+        );
+        return { valid: true };
+      }
+      case 'anthropic': {
+        await axios.post(
+          'https://api.anthropic.com/v1/messages',
+          {
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 5,
+            messages: [{ role: 'user', content: 'Say "OK"' }],
+          },
+          {
+            headers: {
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+          },
+        );
+        return { valid: true };
+      }
+      case 'github': {
+        await axios.post(
+          'https://models.inference.ai.azure.com/chat/completions',
+          {
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: 'Say "OK"' }],
+            max_tokens: 5,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 15000,
+          },
+        );
+        return { valid: true };
+      }
+      default:
+        return { valid: false, error: `Unknown provider: ${provider}` };
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        return { valid: false, error: 'Invalid API key' };
+      }
+      if (error.response?.status === 429) {
+        // Rate limited but key is valid
+        return { valid: true };
+      }
+      return { valid: false, error: error.message };
+    }
+    return { valid: false, error: 'Connection error' };
+  }
+}
+
+/**
  * Generate commit message using Google Gemini
  */
 async function generateWithGemini(

@@ -86,3 +86,18 @@ export function isSetupComplete(): boolean {
 export function getConfigPath(): string {
   return CONFIG_FILE;
 }
+
+/**
+ * Clear all configuration (delete config file)
+ */
+export function clearConfig(): boolean {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      fs.unlinkSync(CONFIG_FILE);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}

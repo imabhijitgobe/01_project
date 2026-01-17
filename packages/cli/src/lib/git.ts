@@ -177,3 +177,13 @@ export async function hasChanges(): Promise<boolean> {
   const { stdout } = await execa('git', ['status', '--porcelain']);
   return stdout.trim().length > 0;
 }
+
+/**
+ * Logout from GitHub CLI
+ */
+export async function logoutGh(): Promise<void> {
+  console.log(chalk.yellow('Logging out from GitHub CLI...'));
+  await execa('gh', ['auth', 'logout', '-h', 'github.com'], {
+    stdio: 'inherit',
+  });
+}
